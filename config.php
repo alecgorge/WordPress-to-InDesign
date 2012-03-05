@@ -1,8 +1,8 @@
 <?php
 
 $timezone 	= 'America/New_York';
-$username 	= 'username';
-$password 	= 'password';
-$xmlprc_url = 'http://example.com/xmlrpc.php';
+$username 	= 'XMLRPC_USER';
+$password 	= 'brebeufarrow2012';
+$xmlprc_url = 'http://brebeufarrow.com/xmlrpc.php';
 $save_path 	= 'files/%s.txt'; // %s is the post ID
 
