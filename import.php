@@ -1,7 +1,10 @@
 <?php
 /*
 By William P. Davis (http://wpdavis.com) for Bangor Daily News (http://bangordailynews.com)
+	with modifications by Alec Gorge (http://github.com/alecgorge)
+
 Read all about it at http://dev.bangordailynews.com
+
 LICENSE: Released under GPL (http://www.gnu.org/licenses/gpl.html). You may use this script for free for any use. However, if you make changes and distribute it you must release the code under the GPL license.
 Report changes or bugs to will@wpdavis.com or at http://dev.bangordailynews.com
 */
@@ -14,18 +17,20 @@ header( 'Content-Type:text/html; charset=UTF-8' );
 mb_internal_encoding( 'UTF-8' );
 
 //Default timezone is EST. This doesn't really matter so much what it is, but it must be set
-date_default_timezone_set( 'America/New_York' );
+date_default_timezone_set( $timezone );
 
 //This script requires the IXR Library, which can be downloaded at http://scripts.incutio.com/xmlrpc/
-require( 'IXR_Library.php.inc' );
+require 'IXR_Library.php.inc';
+require 'config.php';
 
 // Create the client object. The URL should point to your server's XMLRPC script
-$client = new IXR_Client( 'http://mysite.com/xmlrpc.php' );
+$client = new IXR_Client( $xmlprc_url );
 
 
-//Set the username and password for the XMLRPC login
-$username = 'username'; 
-$password = 'password'; 
+// the username and password for the XMLRPC login are set in config.php
+
+$eol = php_sapi_name() == 'cli' ? (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' ? "\r\n" : "\n") : "<br/>";
+
 //If you're using the BDN's XMLRPC extender, the login goes like this:
 //				Blog ID	username	password	post type	category	Number of posts		Extra parameters
 $params = array( 1, 	$username, 	$password, 	'post', 	false, 		25, 				array( 'orderby' => 'modified' ) );
@@ -46,17 +51,17 @@ if ( !$client->query( 'bdn.getPosts', $params ) ) {
 		$modified = $post[ 'dateModified' ]->year . '-' . $post[ 'dateModified' ]->month . '-' . $post[ 'dateModified' ]->day . ' ' . $post[ 'dateModified' ]->hour . ':' . $post[ 'dateModified' ]->minute . ':' . $post[ 'dateModified' ]->second;
 	
 		//By default, the files are saved in a subdirectory files
-		$filename = 'files/' . $id . '.txt';
+		$filename = sprintf($save_path, $id);
 		//Maybe consider naming files by title?
 		//$filename = 'files' . $post[ 'title' ] . '.txt';
 		
 		//Check to see if the file exists and whether or not it needs to be updated
 		if ( file_exists( $filename ) && $modified < date( 'Y-m-d H:i:s', filemtime( $filename ) ) ) {
-			echo 'Story ' . $id . ' has not been updated (file: ' . date( 'Y-m-d H:i:s', filemtime( $filename ) ) . ' story:' . $modified . '<br>)';
+			echo 'Story ' . $id . ' has not been updated (file: ' . date( 'Y-m-d H:i:s', filemtime( $filename ) ) . ' story:' . $modified . $eol . ')';
 		} else {
 
 			//Either the file doesn't exist, or the file modification time is less than the post modification time
-			echo 'Modifying story ' . $id . '<br>';			
+			echo 'Modifying story ' . $id . $eol;			
 			
 			//All the custom fields are in an array, so let's loop through them and get the ones we need. Make sure to set the variable false first
 			$print_hed = false;
@@ -91,7 +96,7 @@ if ( !$client->query( 'bdn.getPosts', $params ) ) {
 				
 				//Per the XMLRPC extender, the authors are sent as an array. There can be multiple authors
 				$authors = $post[ 'wp_author_display_name' ];
-				foreach( $authors as $author ) {
+				foreach( (array)$authors as $author ) {
 					//For each author, tack the display name onto the byline
 					$byline .= $author[ 'display_name' ];
 					if( $author != end( $authors ) ) {
@@ -240,10 +245,8 @@ if ( !$client->query( 'bdn.getPosts', $params ) ) {
 			$string .= $copy;
 			
 			//Finally, write everything to the file
-			$fh = fopen( $filename, 'w' ) or die( 'Can\'t open file' );
-			fwrite( $fh, $string );
-			fclose( $fh );
-			echo 'Generated post ID ' . $id . '<br>';
+			file_put_contents($filename, $string) or die( 'Can\'t open ' . $filename );
+			echo 'Generated post ID ' . $id . $eol;
 		}
 	}
 }
