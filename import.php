@@ -16,19 +16,18 @@ set_time_limit( 0 );
 header( 'Content-Type:text/html; charset=UTF-8' );
 mb_internal_encoding( 'UTF-8' );
 
+require 'config.php';
+
 //Default timezone is EST. This doesn't really matter so much what it is, but it must be set
 date_default_timezone_set( $timezone );
 
 //This script requires the IXR Library, which can be downloaded at http://scripts.incutio.com/xmlrpc/
 require 'IXR_Library.php.inc';
-require 'config.php';
 
 // Create the client object. The URL should point to your server's XMLRPC script
 $client = new IXR_Client( $xmlprc_url );
 
-
 // the username and password for the XMLRPC login are set in config.php
-
 $eol = php_sapi_name() == 'cli' ? (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' ? "\r\n" : "\n") : "<br/>";
 
 //If you're using the BDN's XMLRPC extender, the login goes like this:
@@ -56,7 +55,7 @@ if ( !$client->query( 'bdn.getPosts', $params ) ) {
 		//$filename = 'files' . $post[ 'title' ] . '.txt';
 		
 		//Check to see if the file exists and whether or not it needs to be updated
-		if ( file_exists( $filename ) && $modified < date( 'Y-m-d H:i:s', filemtime( $filename ) ) ) {
+		if ( !$always_update && file_exists( $filename ) && $modified < date( 'Y-m-d H:i:s', filemtime( $filename ) ) ) {
 			echo 'Story ' . $id . ' has not been updated (file: ' . date( 'Y-m-d H:i:s', filemtime( $filename ) ) . ' story:' . $modified . $eol . ')';
 		} else {
 
@@ -95,17 +94,15 @@ if ( !$client->query( 'bdn.getPosts', $params ) ) {
 			if( empty( $byline ) ) {
 				
 				//Per the XMLRPC extender, the authors are sent as an array. There can be multiple authors
-				$authors = $post[ 'wp_author_display_name' ];
-				foreach( (array)$authors as $author ) {
-					//For each author, tack the display name onto the byline
-					$byline .= $author[ 'display_name' ];
-					if( $author != end( $authors ) ) {
-						// If it's not the last author in the array, add 'and' to the byline
-						$byline .= ' and ';
-					} else {
-						// If it is the last author, we can add a comma and custom field from the user metadata
-						$byline .= ', ' . $author[ 'myfield' ];
-					}
+				$authors = $post[ 'wp_authors' ];
+
+				if($authors[0]) {
+					$byline = count($authors) ? implode(', ', array_filter($authors, function($v) {
+						return $v['display_name'];
+					})) . ' and ' . $last['display_name'] : $last['display_name'];
+				}
+				else {
+					$byline = $authors['data']['display_name'];
 				}
 			}
 			
@@ -178,7 +175,7 @@ if ( !$client->query( 'bdn.getPosts', $params ) ) {
 			$copy = str_replace('|', '	', $copy);
 
 			//One of the things we do is strip out Maine from datelines for print
-			$copy = preg_replace('/, Maine <0x2014>/',' <0x2014>',$copy);
+			//$copy = preg_replace('/, Maine <0x2014>/',' <0x2014>',$copy);
 
 		
 			//Go through each paragraph and make sure there's no whitespace on either end
@@ -211,11 +208,19 @@ if ( !$client->query( 'bdn.getPosts', $params ) ) {
 				//Then put in the headline
 				$print_hed .= $rawHed;
 				//At the end, a column break
-				$print_hed .= "<cnxc:Column>\r\n";
-				//Finally, make sure we're converting smart quotes
-				$string .= preg_replace( $quotesoriginal, $quotesreplace, $print_hed );
-				
+				$print_hed .= "<cnxc:Column>\r\n";				
 			}
+			else {
+				$print_hed = sprintf('<pstyle:%s>%s', $title, $post['title']);
+
+				$subtitle_txt = $custom_fields['subtitle'][0];
+				if($subtitle) {
+					$print_head .= sprintf("\n<pstyle:%s>%s", $subtitle, $subtitle_txt);
+				}
+			}
+
+			//Finally, make sure we're converting smart quotes
+			$string .= preg_replace( $quotesoriginal, $quotesreplace, $print_hed );
 	
 
 			//All our systems run on Windows, hence the windows line endings. If you wanted to use a unix system instead,
@@ -227,19 +232,19 @@ if ( !$client->query( 'bdn.getPosts', $params ) ) {
 			
 			//We treat bylines that are just for The Associated Press differently
 			if( $byline && $byline1 == 'The Associated Press' ) {
-				$string .= '<pstyle:Byline 2>' . trim( $byline1 ) . "\r\n";
+				$string .= '<pstyle:'.$author.'>' . trim( $byline1 ) . "\r\n";
 			} elseif( $byline ) {
 
 				//If it's not an AP byline, the first line is Byline 1 By So and So
-				$string .= '<pstyle:Byline 1>By ' . trim( $byline1 ) . "\r\n"; 
+				$string .= '<pstyle:'.$author.'>By ' . trim( $byline1 ) . "\r\n"; 
 				
 				//And if there's a second part, it would be BDN Staff
 				if( $byline2 )
-					$string .= '<pstyle:Byline 2>' . trim( $byline2 ) . "\r\n";
+					$string .= '<pstyle:'.$author.'>' . trim( $byline2 ) . "\r\n";
 			}
 		
 			//At this point, we're almost done. Our body text paragraph style is, brilliantly, called Body Text
-			$string .= '<pstyle:Body Text>';
+			$string .= '<pstyle:' . $body_text . '>';
 			
 			//Then just flow in the copy
 			$string .= $copy;
